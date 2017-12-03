@@ -38,6 +38,10 @@ pid=9665 的 cpu 耗用非常高，执行命令 `jstack 9665 > java.log` 命令�
 
 # Appendix
 
+## Related Documentation
+
+[Using JConsole](https://docs.oracle.com/javase/9/management/using-jconsole.htm#JSMGM-GUID-77416B38-7F15-4E35-B3D1-34BFD88350B5)
+
 ## Revision History
 
 | 时间 | 描述 |
