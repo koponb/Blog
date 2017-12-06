@@ -47,6 +47,8 @@ JVM 内控制一个堆，被所有 Java 虚拟机线程共享。堆随JVM的创�
 
 对象的堆存储是由垃圾回收机制自动管理的，用户无须显示的释放。Java 堆分为
 
+
+
 1. 算法
 2. 优化
 
@@ -106,6 +108,8 @@ https://docs.oracle.com/javase/9/management/using-jconsole.htm#GUID-A81AE10A-069
 [The Java® Virtual Machine Specification](https://docs.oracle.com/javase/specs/jvms/se9/html/index.html)
 
 [Java内存区域 JVM运行时数据区](http://blog.csdn.net/tjiyu/article/details/53915869)
+
+[Using JConsole](https://docs.oracle.com/javase/9/management/using-jconsole.htm#JSMGM-GUID-77416B38-7F15-4E35-B3D1-34BFD88350B5)
 
 ## Revision History
 
