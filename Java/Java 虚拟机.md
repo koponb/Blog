@@ -45,51 +45,244 @@ JVM 内控制一个堆，被所有 Java 虚拟机线程共享。堆随JVM的创�
 
 ### 1.4.1 垃圾回收
 
-对象的堆存储是由垃圾回收机制自动管理的，用户无须显示的释放。Java 堆分为
+对象的堆存储是由垃圾回收机制自动管理的，用户无须显示的释放。JVM 使用 G1 收集器（支持并发收集）将堆分为年轻代（Young Generation）和年老代（Old Generation），年轻代分为一个大 Eden Space 和两个小的 Survivor Space，Eden 和 Survivor 默认比例是 8:1。
 
+通过 new 指令的对象绝大多数情况会在 eden 区创建和销毁，需要大内存的数据会直接在 old 区创建。回收时先将 eden 区存活对象复制到一个 survivor0 区，然后清空 eden 区，当这个 survivor0 区也存放满了时，则将 eden 区和 survivo0 区存活对象复制到另一个 survivor1 区，然后清空 eden 和这个 survivor0 区，此时 survivor0 区是空的，然后将 survivor0 区和 survivor1 区交换，即保持 survivor1 区为空， 如此往复。
 
+每一次的gc，存活的对象年龄 +1，默认对象经过了 15 次 GC 还是存活的时候，会移入到 old 区。当
 
-1. 算法
-2. 优化
+整个对象的存活顺序如下所示经过 young(eden -> survivor) -> old。
+
+![](https://raw.githubusercontent.com/937447974/Blog/master/Resources/2017120602.png)
 
 ### 1.4.2 异常
 
-## 1.4 Method Area（方法区）
+如果 Heap 满了，且垃圾回收也无法回收内存，又无法申请更多的内存时，会抛出 OutOfMemoryError 异常。
 
-## 1.5 Run-Time Constant Pool（运行时常量池）
+很多时候我们希望更快的回收内存，如对象未进入年老代就被清理了，但是对象线程逃逸，且线程又没执行完毕，很可能对象就进入了年老代，长时间停留在内存中。Java 为解除这种强引用对象问题，对此提供了软引用、弱引用和虚引用对象。
+
+1. 软引用（SoftReference）：软引用是用来描述一些有用但并不是必需的对象，只有在内存不足的时候JVM才会回收该对象。
+2. 弱引用（WeakReference）：弱引用也是用来描述非必需对象的，当JVM进行垃圾回收时，无论内存是否充足，都会回收被弱引用关联的对象。
+3. 虚引用（PhantomReference）：虚引用和前面的软引用、弱引用不同，它并不影响对象的生命周期。如果一个对象与虚引用关联，则跟没有引用与之关联一样，在任何时候都可能被垃圾回收器回收。
+
+## 1.5 Method Area（方法区）
+
+方法区类似于一个传统语言的编译代码的存储区域，被所有 Java 虚拟机线程共享。它存储每个类的结构，比如运行时常量池、字段和方法数据、以及方法和构造函数的代码，还包括一些在类、实例、接口初始化时用到的特殊方法。方法区又名非堆，和 java 堆区分，代表它是提供给 JVM 使用的内存区域。
+
+方法区不是垃圾回收的主要工作区域，当它也有垃圾回收机制，如卸载一个不使用的类。
+
+### 1.5.1 Run-Time Constant Pool（运行时常量池）
+
+运行常量池是方法区的一部分，包含了若干种不同的常量。
+
+1. class 文件结构中的常量池。
+2. 运行期栈动态链接才知道的方法或字段的直接引用。
+3. 运行时可能创建的新常量，如 String 类 intern() 方法。
+
+### 1.5.2 异常
+
+理论上方法区是不会抛异常，不过当方法区需要内存扩展且无法申请时，会抛 OutOfMemoryError 异常。如堆将内存快耗尽了，此时方法区加载未使用的类将无法申请到内存，抛异常。
+
+# 2 Class 字节码
+
+测试代码
+
+```java
+public class Test {
+    private int a = 3;
+    private static Integer b = 5;
+    public String c = "YJ";
+
+    public static void main(String[] args) throws Exception {
+        Test test = new Test();
+        test.a = 8;
+        b = 8;
+    }
+
+    private String test1() {
+        return "YJJ";
+    }
+    
+}
+```
+
+编译上面的 Test.java 后，执行 `javap -v Test` 命令打开 Test.class。得到如下所示的数据
+
+```java
+Classfile /Users/didi/Desktop/GitHub/Java/java/target/test-classes/Test.class
+  Last modified 2017年12月6日; size 823 bytes
+  MD5 checksum 17782135ec29c6b388028d5257adf83c
+  Compiled from "Test.java"
+public class Test
+  minor version: 0
+  major version: 52
+  flags: (0x0021) ACC_PUBLIC, ACC_SUPER
+  this_class: #5                          // Test
+  super_class: #10                        // java/lang/Object
+  interfaces: 0, fields: 3, methods: 4, attributes: 1
+Constant pool:
+   #1 = Methodref          #10.#36        // java/lang/Object."<init>":()V
+   #2 = Fieldref           #5.#37         // Test.a:I
+   #3 = String             #38            // YJ
+   #4 = Fieldref           #5.#39         // Test.c:Ljava/lang/String;
+   #5 = Class              #40            // Test
+   #6 = Methodref          #5.#36         // Test."<init>":()V
+   #7 = Methodref          #41.#42        // java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+   #8 = Fieldref           #5.#43         // Test.b:Ljava/lang/Integer;
+   #9 = String             #44            // YJJ
+  #10 = Class              #45            // java/lang/Object
+  #11 = Utf8               a
+  #12 = Utf8               I
+  #13 = Utf8               b
+  #14 = Utf8               Ljava/lang/Integer;
+  #15 = Utf8               c
+  #16 = Utf8               Ljava/lang/String;
+  #17 = Utf8               <init>
+  #18 = Utf8               ()V
+  #19 = Utf8               Code
+  #20 = Utf8               LineNumberTable
+  #21 = Utf8               LocalVariableTable
+  #22 = Utf8               this
+  #23 = Utf8               LTest;
+  #24 = Utf8               main
+  #25 = Utf8               ([Ljava/lang/String;)V
+  #26 = Utf8               args
+  #27 = Utf8               [Ljava/lang/String;
+  #28 = Utf8               test
+  #29 = Utf8               Exceptions
+  #30 = Class              #46            // java/lang/Exception
+  #31 = Utf8               test1
+  #32 = Utf8               ()Ljava/lang/String;
+  #33 = Utf8               <clinit>
+  #34 = Utf8               SourceFile
+  #35 = Utf8               Test.java
+  #36 = NameAndType        #17:#18        // "<init>":()V
+  #37 = NameAndType        #11:#12        // a:I
+  #38 = Utf8               YJ
+  #39 = NameAndType        #15:#16        // c:Ljava/lang/String;
+  #40 = Utf8               Test
+  #41 = Class              #47            // java/lang/Integer
+  #42 = NameAndType        #48:#49        // valueOf:(I)Ljava/lang/Integer;
+  #43 = NameAndType        #13:#14        // b:Ljava/lang/Integer;
+  #44 = Utf8               YJJ
+  #45 = Utf8               java/lang/Object
+  #46 = Utf8               java/lang/Exception
+  #47 = Utf8               java/lang/Integer
+  #48 = Utf8               valueOf
+  #49 = Utf8               (I)Ljava/lang/Integer;
+{
+  public java.lang.String c;
+    descriptor: Ljava/lang/String;
+    flags: (0x0001) ACC_PUBLIC
+
+  public Test();
+    descriptor: ()V
+    flags: (0x0001) ACC_PUBLIC
+    Code:
+      stack=2, locals=1, args_size=1
+         0: aload_0
+         1: invokespecial #1                  // Method java/lang/Object."<init>":()V
+         4: aload_0
+         5: iconst_3
+         6: putfield      #2                  // Field a:I
+         9: aload_0
+        10: ldc           #3                  // String YJ
+        12: putfield      #4                  // Field c:Ljava/lang/String;
+        15: return
+      LineNumberTable:
+        line 12: 0
+        line 13: 4
+        line 15: 9
+      LocalVariableTable:
+        Start  Length  Slot  Name   Signature
+            0      16     0  this   LTest;
+
+  public static void main(java.lang.String[]) throws java.lang.Exception;
+    descriptor: ([Ljava/lang/String;)V
+    flags: (0x0009) ACC_PUBLIC, ACC_STATIC
+    Code:
+      stack=2, locals=2, args_size=1
+         0: new           #5                  // class Test
+         3: dup
+         4: invokespecial #6                  // Method "<init>":()V
+         7: astore_1
+         8: aload_1
+         9: bipush        8
+        11: putfield      #2                  // Field a:I
+        14: bipush        8
+        16: invokestatic  #7                  // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+        19: putstatic     #8                  // Field b:Ljava/lang/Integer;
+        22: return
+      LineNumberTable:
+        line 18: 0
+        line 19: 8
+        line 20: 14
+        line 21: 22
+      LocalVariableTable:
+        Start  Length  Slot  Name   Signature
+            0      23     0  args   [Ljava/lang/String;
+            8      15     1  test   LTest;
+    Exceptions:
+      throws java.lang.Exception
+
+  static {};
+    descriptor: ()V
+    flags: (0x0008) ACC_STATIC
+    Code:
+      stack=1, locals=0, args_size=0
+         0: iconst_5
+         1: invokestatic  #7                  // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+         4: putstatic     #8                  // Field b:Ljava/lang/Integer;
+         7: return
+      LineNumberTable:
+        line 14: 0
+}
+SourceFile: "Test.java"
+```
+
+JVM 加载上面的字节码文件后会得到一个如下所示的 ClassFile 对象。
+
+```java
+ClassFile {
+       u4             magic;
+       u2             minor_version;
+       u2             major_version;
+       u2             constant_pool_count;
+       cp_info        constant_pool[constant_pool_count-1];
+       u2             access_flags;
+       u2             this_class;
+       u2             super_class;
+       u2             interfaces_count;
+       u2             interfaces[interfaces_count];
+       u2             fields_count;
+       field_info     fields[fields_count];
+       u2             methods_count;
+       method_info    methods[methods_count];
+       u2             attributes_count;
+       attribute_info attributes[attributes_count];
+}
+```
+
+其中包含魔术、版本号、常量池、类信息、类的构造函数、类中所包含的方法信息以及类（成员）变量信息。
+
+## 2.1 魔术
+
+魔术用于校验 class 文件是否可被加载，它的值是固定的 0xCAFEBABE。
+
+使用如下命令打开 Test.class 的 16 进制。
+
+```java
+vi -b Test.class
+:%!xxd
+```
+
+执行命令后
 
 
-G1 eden space
-G1 Old Gen
-G1 survivor space
-
-metaspace
-codeheap profiled nmethods
-codeheap non-nmethods
-compressed class space
-codeheap non-profiled nmethods
-
-Eden Space (heap): The pool from which memory is initially allocated for most objects.
-
-Survivor Space (heap): The pool containing objects that have survived the garbage collection of the Eden space.
-
-Tenured Generation (heap): The pool containing objects that have existed for some time in the survivor space.
-
-Permanent Generation (non-heap): The pool containing all the reflective data of the virtual machine itself, such as class and method objects. With Java VMs that use class data sharing, this generation is divided into read-only and read-write areas.
-
-Code Cache (non-heap): The HotSpot Java VM also includes a code cache, containing memory that is used for compilation and storage of native code.
-
-https://docs.oracle.com/javase/9/management/using-jconsole.htm#GUID-A81AE10A-0693-462A-B129-5E292F46523E__FIGURE3-7GENERATIONSOFDATAINGARBAGE-8F135AA1
+# 3 Class 类结构
 
 
-# 2 OOM 优化
-
-# 3 垃圾回收
-
-
-# 4 Class 字节码
-
-# 5 类的生命周期
+# 4 类的生命周期
 
 
 
