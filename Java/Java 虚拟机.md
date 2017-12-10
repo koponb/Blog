@@ -276,14 +276,130 @@ vi -b Test.class
 :%!xxd
 ```
 
-执行命令后
+执行命令后可以看见文件的前 4 个字节是魔术 0xCAFEBABE。如果开始四个字节不是 0xCAFEBABE，则JVM 将会认为该文件不是 .class 文件，并拒绝解析。
 
+![](https://raw.githubusercontent.com/937447974/Blog/master/Resources/2017120603.png)
 
-# 3 Class 类结构
+## 2.2 版本号
 
+版本号分为主版本号（major_version）和次版本号（minor_version），在 16 进制的后 4 字节 0x00000034(先小版本后大版本)，可知版本号为（0，52），即 52.0，目前已发布的 Version 为 1.1(45)~1.9(53)，可知 Test.class 是在 JDK 1.8 编译的，如果 JVM 发现 class 版本号大于JVM 版本号，则会报错 “java.lang.UnsupportedClassVersionError: ... : Unsupported major.minor version 52.0”
 
-# 4 类的生命周期
+## 2.3 常量池
 
+常量池是 .class 字节码文件中非常重要的核心内容，一个 Java 类中绝大多数的信息都由常量池描述，尤其是 Java 中定义的变量和方法，都由常量池保存。JVM 方法区中的运行时常量池就是用来保存每个 Java 类所对应的常量池的信息的。
+
+## 2.4 访问标识
+
+常量池数组之后跟着的是 access_flags 结构，代表访问标志符号，该标志用于标志类或接口层次的访问信息。
+
+access_flags 的可选值如下所示
+
+| Flag Name | Value | Interpretation |
+| --- | --- | --- || ACC_PUBLIC | 0x0001 | 是否为 public 类型 || ACC_FINAL | 0x0010 | 是否声明为 final || ACC_SUPER | 0x0020 | 是否允许使用 invokespecial 字节码指令 || ACC_INTERFACE | 0x0200 | 声明为接口 || ACC_ABSTRACT | 0x0400 | 声明 abstract 类型，不能被实例化。|| ACC_SYNTHETIC | 0x1000 | 声明这个类并非由用户代码产生 || ACC_ANNOTATION | 0x2000 | 声明为注解 || ACC_ENUM | 0x4000 | 声明为枚举 || ACC_MODULE | 0x8000 | 声明为模块 |
+
+Test.class 的访问标识 `flags: (0x0021) ACC_PUBLIC, ACC_SUPER`，对应源代码 `public class Test`。
+
+## 2.5 当前类
+
+当前类 this_class 记录当前类的权限定名（包名+类名），其值指向常量池中对象的索引值。
+
+如 Test.class 字节码解析类名
+
+```
+this_class: #5
+#5 = Class  #40            // Test
+#40 = Utf8  Test
+```
+
+## 2.6 父类
+
+父类 super_class 记录当前类的父类全限定名，其值指向常量池中对应的索引值。
+
+如 Test.class 字节码解析父类名
+
+```java
+super_class: #10                        // java/lang/Object
+#10 = Class       #45            // java/lang/Object
+#45 = Utf8        java/lang/Object
+```
+
+## 2.7 接口
+
+interfaces 记录了当前类实现的接口信息。
+
+## 2.8 字段
+
+fields 记录当前类成员变量和类变量（静态变量）。fields 内部由 fields_info 保存变量的详细信息。
+
+```
+field_info {
+       u2             access_flags; // 访问标识
+       u2             name_index; // 名称引用
+       u2             descriptor_index; // 变量的类型信息引用
+       u2             attributes_count; // 字段内的属性个数 
+       attribute_info attributes[attributes_count]; // 字段内的属性信息
+}
+```
+
+## 2.9 方法
+
+methods 记录当前类中包含的方法。Test.class 中的方法个数是4，实际源码中的方法个数是2，这是因为编译器编译的时候会默认添加 `static{}` 静态初始化（类中有静态变量）和类初始化方法。 methods 内由 methods_info 保存变量的详细详细。
+
+```
+method_info {
+       u2             access_flags; // 访问标识
+       u2             name_index; // 方法名
+       u2             descriptor_index; // 方法的类型信息引用
+       u2             attributes_count; // 参数属性个数
+       attribute_info attributes[attributes_count]; // 参数属性内容
+}
+```
+
+## 2.10 属性
+
+attribute 记录当前类的所有属性。对于 class 来说，必须有一个模块属性。 attributes 内由 attribute_info 保存属性的详细详细。
+
+```
+attribute_info {
+       u2 attribute_name_index; // 属性名引用
+       u4 attribute_length; // 属性长度
+       u1 info[attribute_length]; // 属性内信息
+}
+```
+
+# 3 类的生命周期
+
+一个 Java 字节码文件从加载到卸载的整个生命过程，总共要经历 5 个阶段：加载、链接、初始化、使用和卸载。其中链接又分支验证、准备和解析。前面的常量池解析、类字段解析和方法解析都属于加载阶段的一部分。
+
+## 3.1 加载
+
+Java 程序的所有数据结构和算法都封装在类型之中，这也是面向对象编程语言的一大特色。当 JVM 执行一个 Java 类所封装的算法之前，首先要做的一件事便是字节码文件解析，字节码文件解析包含3个主要的过程常量池解析、类字段解析和方法解析。通过类字段解析，JVM 能够分析 Java 类的数据结构；通过方法解析，JVM 能够分析出 Java 类所封装的算法逻辑。而无论是数据结构还是方法信息，很多相关的信息都封装与常量池中，所以 JVM 会先解析常量池，后解析字段和方法信息。
+
+Loading Using the Bootstrap Class Loader
+Loading Using a User-defined Class Loader
+Creating Array Classes
+Loading Constraints
+Deriving a Class from a class File Representation
+Modules and Layers
+
+使用引导类装入器装入
+使用用户定义的类装入器加载
+创建数组类
+载荷约束
+从类文件表示派生类
+模块和层
+
+## 3.2 链接
+
+### 3.2.1 验证
+### 3.2.2 准备
+### 3.2.3 解析
+
+## 3.3 初始化
+
+## 3.4 使用
+
+## 3.5 卸载
 
 
 &#160;
